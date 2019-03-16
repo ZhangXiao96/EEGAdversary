@@ -3,6 +3,7 @@ from tensorflow.keras.models import Model
 from tensorflow.keras.layers import Input
 import tensorflow as tf
 import numpy as np
+import pickle as pickle
 
 
 class Pipeline(object):
@@ -42,6 +43,25 @@ class Pipeline(object):
         for processer in self.processors:
             _x = processer.transform(_x)
         return self.classifier.predict(_x)
+
+    def save(self, save_path):
+        weights = []
+        for processer in self.processors:
+            weights.append(processer.get_weights())
+        weights.append(self.classifier.get_weights())
+        with open(save_path, 'wb') as f:  # open file with write-mode
+            picklestring = pickle.dump(weights, f)  # serialize and save object
+            f.flush()
+            f.close()
+
+    def load(self, load_path):
+        with open(load_path, 'rb') as f:
+            weights = pickle.load(f)  # read file and build object
+            f.close()
+            for i in range(len(self.processors)):
+                self.processors[i].load_weights(weights[i])
+            self.classifier.load_weights(weights[-1])
+            self.fitted = True
 
     def get_keras_model(self, input_shape):
         assert self.fitted, "The pipeline has not been trained yet!"

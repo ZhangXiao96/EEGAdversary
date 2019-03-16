@@ -4,8 +4,11 @@ from mne.decoding import CSP as mne_CSP
 from sklearn.decomposition import PCA as sklearn_PCA
 from sklearn.decomposition import FastICA as sklearn_ICA
 from pyriemann.tangentspace import TangentSpace as riemann_TangentSpace
+from pyriemann.spatialfilters import Xdawn as riemman_Xdawn
 
 from sklearn.linear_model import LogisticRegression as sklearn_LR
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as sklearn_LDA
+from sklearn.svm import LinearSVC as sklearn_LSVC
 from pyriemann.classification import MDM as riemann_MDM
 
 import tensorflow as tf
@@ -13,7 +16,6 @@ from tensorflow.keras.layers import Lambda
 from tensorflow.keras.layers import Flatten as keras_Flatten
 
 import numpy as np
-from scipy.linalg import eig
 from lib.tf_Riemann.Distance import distance
 from lib.tf_Riemann.TangentSpace import tangent_space
 
@@ -21,6 +23,7 @@ from lib.tf_Riemann.TangentSpace import tangent_space
 class ProcessingBlock(object):
     def __init__(self, name):
         self.name = name
+        self.weights = []
 
     @abstractmethod
     def fit(self):
@@ -31,13 +34,24 @@ class ProcessingBlock(object):
         pass
 
     @abstractmethod
+    def transform(self):
+        pass
+
+    @abstractmethod
     def get_keras_layer(self):
         pass
+
+    def get_weights(self):
+        return self.weights
+
+    def load_weights(self, weights):
+        self.weights = weights
 
 
 class ClassifierBlock(object):
     def __init__(self, name):
         self.name = name
+        self.weights = []
 
     @abstractmethod
     def fit(self):
@@ -51,12 +65,17 @@ class ClassifierBlock(object):
     def get_keras_layer(self):
         pass
 
+    def get_weights(self):
+        return self.weights
 
-# ------------------------Processors-----------------------
+    def load_weights(self, weights):
+        self.weights = weights
+
+
+# -----------------------ProcessingBlock------------------
 class Flatten(ProcessingBlock):
     def __init__(self, name="Flatten"):
         super(Flatten, self).__init__(name)
-
 
     def fit(self, x, y):
         pass
@@ -64,9 +83,6 @@ class Flatten(ProcessingBlock):
     def transform(self, x):
         n_epochs = x.shape[0]
         return np.reshape(x, newshape=(n_epochs, -1))
-
-    def __get_weights(self):
-        return None
 
     def get_keras_layer(self):
         return keras_Flatten()
@@ -86,17 +102,14 @@ class CSP(ProcessingBlock):
     def fit(self, x, y):
         assert len(x.shape) == 3
         self.model.fit(x, y)
+        self.weights = [np.array(self.model.filters_[:self.model.n_components]).astype(np.float64)]
 
     def transform(self, x):
         assert len(x.shape) == 3
         return self.model.transform(x)
 
-    def __get_weights(self):
-        csp_matrix = np.array(self.model.filters_[:self.model.n_components]).astype(np.float64)    # (n_components, channels)
-        return csp_matrix
-
     def get_keras_layer(self):
-        csp_matrix = self.__get_weights()
+        csp_matrix = self.weights[0]
 
         def csp_transform(_x):
             csp_tensor = tf.constant(csp_matrix.T)  # (channels, n_components)
@@ -130,6 +143,10 @@ class PCA4Channel(ProcessingBlock):
         assert len(x.shape) == 3
         _x = np.hstack(x)   # (n_channels, n_samples * n_epochs)
         self.model.fit(_x.T, y)
+        pca_matrix = np.array(self.model.components_).astype(np.float64)
+        mean = np.array(self.model.mean_).astype(np.float64)
+        variance = np.array(self.model.explained_variance_).astype(np.float64)
+        self.weights = [mean, pca_matrix, variance]
 
     def transform(self, x):
         assert len(x.shape) == 3
@@ -142,14 +159,8 @@ class PCA4Channel(ProcessingBlock):
         _x = np.transpose(_x, axes=(1, 0, 2))
         return _x
 
-    def __get_weights(self):
-        pca_matrix = np.array(self.model.components_).astype(np.float64)
-        mean = np.array(self.model.mean_).astype(np.float64)
-        variance = np.array(self.model.explained_variance_).astype(np.float64)
-        return mean, pca_matrix, variance
-
     def get_keras_layer(self):
-        mean, pca_matrix, variance = self.__get_weights() # shape(pca_matrix) = (n_components, n_samples)
+        mean, pca_matrix, variance = self.weights # shape(pca_matrix) = (n_components, n_samples)
         if self.whiten:
             sqrt_variance = np.sqrt(variance)
             pca_matrix = pca_matrix / np.reshape(sqrt_variance, newshape=(self.n_components, 1))
@@ -179,6 +190,10 @@ class PCA4Feature(ProcessingBlock):
     def fit(self, x, y=None):
         assert len(x.shape) >= 2    # (n_epochs, n_features)
         self.model.fit(x, y)
+        pca_matrix = np.array(self.model.components_).astype(np.float64)
+        mean = np.array(self.model.mean_).astype(np.float64)
+        variance = np.array(self.model.explained_variance_).astype(np.float64)
+        self.weights = [mean, pca_matrix, variance]
 
     def transform(self, x):
         assert len(x.shape) == 2
@@ -186,14 +201,8 @@ class PCA4Feature(ProcessingBlock):
         _x = self.model.transform(_x)
         return _x
 
-    def __get_weights(self):
-        pca_matrix = np.array(self.model.components_).astype(np.float64)
-        mean = np.array(self.model.mean_).astype(np.float64)
-        variance = np.array(self.model.explained_variance_).astype(np.float64)
-        return mean, pca_matrix, variance
-
     def get_keras_layer(self):
-        mean, pca_matrix, variance = self.__get_weights() # shape(pca_matrix) = (n_components, n_samples)
+        mean, pca_matrix, variance = self.weights # shape(pca_matrix) = (n_components, n_samples)
         if self.whiten:
             sqrt_variance = np.sqrt(variance)
             pca_matrix = pca_matrix / np.reshape(sqrt_variance, newshape=(self.n_components, 1))
@@ -220,6 +229,9 @@ class ICA(ProcessingBlock):
         assert len(x.shape) == 3
         _x = np.hstack(x)  # (n_channels, n_samples * n_epochs)
         self.model.fit(_x.T)
+        unmixing_matrix = np.array(self.model.components_).astype(np.float64)
+        mean_matrix = np.array(self.model.mean_).astype(np.float64)
+        self.weights = [unmixing_matrix, mean_matrix]
 
     def transform(self, x):
         assert len(x.shape) == 3
@@ -232,13 +244,8 @@ class ICA(ProcessingBlock):
         _x = np.transpose(_x, axes=(1, 0, 2))
         return _x
 
-    def __get_weights(self):
-        unmixing_matrix = np.array(self.model.components_).astype(np.float64)
-        mean_matrix = np.array(self.model.mean_).astype(np.float64)
-        return unmixing_matrix, mean_matrix
-
     def get_keras_layer(self):
-        unmixing_matrix, mean_matrix = self.__get_weights()
+        unmixing_matrix, mean_matrix = self.weights
 
         def ica_transform(_x):
             ica_tensor = tf.constant(unmixing_matrix.T)  # (channels, n_components)
@@ -268,7 +275,8 @@ class CovarianceFeature(ProcessingBlock):
             template_list = []
             for label in y_unique:
                 template_list.append(np.mean(x[y == label, :, :], axis=0, keepdims=False))
-            self.templates = np.concatenate(template_list, axis=0).astype(np.float64)
+            templates = np.concatenate(template_list, axis=0).astype(np.float64)
+            self.weights = [templates]
 
     def transform(self, x):
         assert len(x.shape) == 3        # (n_epochs, n_channels, n_samples)
@@ -286,18 +294,13 @@ class CovarianceFeature(ProcessingBlock):
         c = np.matmul(_x, _x_T)/(n_samples-1.)
         return c
 
-    def __get_weights(self):
-        templates = None
-        if self.with_templates:
-            templates = self.templates
-        return templates
-
     def get_keras_layer(self):
 
         def cov_transform(_x):
             n_samples = int(_x.shape[2])
             if self.with_templates:
-                templates_tensor = tf.constant(self.__get_weights())
+                t = self.weights[0]
+                templates_tensor = tf.constant(t)
                 templates_tensor = tf.expand_dims(templates_tensor, 0)
                 templates_tensor = tf.tile(templates_tensor, (tf.shape(_x)[0], 1, 1))
                 _x = tf.concat((_x, templates_tensor), axis=1)
@@ -311,87 +314,59 @@ class CovarianceFeature(ProcessingBlock):
 
 
 class Xdawn(ProcessingBlock):
-    """
-    Please Note that xDAWN is now just implemented to processing P300 EEG data which usually
-    consists of 2 Classes (target and none-target). This implementation is based on EEG EEG
-    epochs (the original implementation is based on EEG trials), which means we only need to
-    calculate the spatial filters.
-    Our implementation also references https://github.com/alexandrebarachant/bci-challenge-ner-2015
-    which won the first prize at the BCI Challenge @ NER 2015 : https://www.kaggle.com/c/inria-bci-challenge.
-    """
-    def __init__(self, n_components=4, with_xdawn_templates=False, transform_flag=True, name="Xdawn"):
+    def __init__(self, n_filters=4, with_xdawn_templates=False, apply_filters=True, name="Xdawn"):
         """
 
-        :param n_components: The number of spatial filters.
+        :param n_filters: The number of spatial filters. When "transform_flag=False", the original_data would
+               not be filtered.
         :param with_xdawn_templates: Set True if padding the templates on the original EEG epochs.
                Usually used to calculate Xdawn Covariance Matrix.
-        :param transform: Sometimes only the templates are needed, in this case set
+        :param apply_filters: Sometimes only the templates are needed, in this case set
                'transform=False' to just pad the templates on the original EEG epochs. Usually
                set to 'False' when using Xdawn Covariance Matrix.
         :param name: The name of the block.
         """
         super(Xdawn, self).__init__(name)
-        self.n_components = n_components
-        self.transform_flag = transform_flag
+        self.n_filters = n_filters
+        self.apply_filters = apply_filters
         self.with_templates = with_xdawn_templates
+        self.model = riemman_Xdawn(nfilter=self.n_filters)
 
     def fit(self, x, y):
         assert len(x.shape) == 3    # (n_epochs, n_channels, n_samples)
-        unique_y = np.unique(y)
-        assert len(unique_y)==2 and set(unique_y).issubset(set([0,1])), \
-            "Only P300 data is vailable, y=1 for target, while 0 for none-target!"
-
-        P1 = np.mean(x[y == 1, :, :], axis=0)
-        P0 = np.mean(x[y == 0, :, :], axis=0)
-
-        C1 = np.matrix(np.cov(P1))
-        C0 = np.matrix(np.cov(P0))
-        _x = np.hstack(x)   # (n_channels, n_samples * n_epochs)
-        Cx = np.matrix(np.cov(_x))
-
-        # Spatial filters
-        D, self.V1 = eig(C1, Cx)
-        D, self.V0 = eig(C0, Cx)
-
-        # create the templates (usually only used if covariance features are supposed to be used.)
-        self.P = np.concatenate(
-            (np.dot(self.V1[:, 0:self.n_components].T, P1), np.dot(self.V0[:, 0:self.n_components].T, P0)),
-            axis=0
-        )
+        self.model.fit(x, y)
+        Xdawn_matrix = np.array(self.model.filters_).astype(np.float64)    # (n_filters * n_classes, channels)
+        templates = np.array(self.model.evokeds_)
+        n_components = len(self.model.classes_) * self.n_filters
+        self.weights = [Xdawn_matrix, templates, n_components]
 
     def transform(self, x):
         assert len(x.shape) == 3    # (n_epochs, n_channels, n_samples)
+        _x = x
         n_epochs = x.shape[0]
-        Xdawn_matrix, templates = self.__get_weights()
-        Xdawn_matrix = Xdawn_matrix[np.newaxis, :, :]
-        templates = templates[np.newaxis, :, :]
-        if self.transform_flag:
-            _x = np.matmul(Xdawn_matrix, x)
-        else:
-            _x = x
+        if self.apply_filters:
+            _x = self.model.transform(_x)
         if self.with_templates:
+            _, templates_origin, _ = self.weights
+            templates = np.copy(templates_origin)
+            templates = templates[np.newaxis, :, :]
             templates = np.repeat(templates, repeats=n_epochs, axis=0)
             _x = np.concatenate((_x, templates), axis=1)
         return _x
 
-    def __get_weights(self):
-        Xdawn_matrix = np.array(self.V1[:self.n_components]).astype(np.float64)    # (n_components, channels)
-        templates = self.P.astype(np.float64)
-        return Xdawn_matrix, templates
-
     def get_keras_layer(self):
-        Xdawn_matrix, templates = self.__get_weights()
+        Xdawn_matrix, templates, n_components = self.weights
 
         def xdawn_transform(_x):
             Xdawn_tensor = tf.constant(Xdawn_matrix.T)  # (channels, n_components)
             templates_tensor = tf.constant(templates)
             n_channels, n_samples = _x.shape[1], _x.shape[2]
 
-            if self.transform_flag:
+            if self.apply_filters:
                 _x = tf.reshape(_x, shape=(-1, 1, n_channels, n_samples))
-                conv_filters = tf.reshape(Xdawn_tensor, (Xdawn_tensor.shape[0], 1, 1, self.n_components))
+                conv_filters = tf.reshape(Xdawn_tensor, (Xdawn_tensor.shape[0], 1, 1, n_components))
                 _x = tf.nn.conv2d(_x, conv_filters, strides=[1, 1, 1, 1], padding='VALID', data_format='NCHW')
-                _x = tf.reshape(_x, (-1, self.n_components, n_samples))
+                _x = tf.reshape(_x, (-1, n_components, n_samples))
 
             if self.with_templates:
                 _templates_tensor = tf.expand_dims(templates_tensor, 0)
@@ -414,18 +389,16 @@ class TangentSpaceFeature(ProcessingBlock):
         assert x.shape[1] == x.shape[2], 'The shape of \'x\' should be (n_epochs, n_channels, n_channles).'
         assert len(y) == len(x)
         self.model.fit(x, y)
+        Cref = np.array(self.model.reference_).astype(np.float64)
+        self.weights = [Cref]
 
     def transform(self, x):
         assert len(x.shape) == 3, 'The shape of \'x\' should be (n_epochs, n_channels, n_channles).'
         assert x.shape[1] == x.shape[2], 'The shape of \'x\' should be (n_epochs, n_channels, n_channles).'
         return self.model.transform(x)
 
-    def __get_weights(self):
-        Cref = np.array(self.model.reference_).astype(np.float64)
-        return Cref
-
     def get_keras_layer(self):
-        Cref = self.__get_weights()
+        Cref = self.weights[0]
 
         def tangent_space_transform(_x):
             Cref_tensor = tf.constant(Cref)  # (channels, channels)
@@ -450,28 +423,26 @@ class LogisticRegression(ClassifierBlock):
         assert len(x.shape) == 2
         assert len(y) == len(x)
         self.model.fit(x, y)
-
-    def predict(self, x):
-        assert len(x.shape) == 2
-        y = self.model.predict_proba(x)
-        return y
-
-    def __get_weights(self):
         coef = self.model.coef_
         intercept_ = self.model.intercept_
         if len(intercept_) == 1:
             """
-            This is important! When len(class)==2, the Sklearn gives a different type of coef_
+            This is important! When len(class)==2, Sklearn gives a different type of coef_
             and intercept. Look at Sklearn for more information!
             """
             coef = np.concatenate((-coef, coef), axis=0)
             intercept_ = np.concatenate((-intercept_, intercept_), axis=0)
         w = np.array(coef).astype(np.float64)
         b = np.array(intercept_).astype(np.float64)
-        return w, b
+        self.weights = [w, b]
+
+    def predict(self, x):
+        assert len(x.shape) == 2
+        y = self.model.predict_proba(x)
+        return y
 
     def get_keras_layer(self):
-        w, b = self.__get_weights()  # shape(w) = (n_class, n_features)
+        w, b = self.weights  # shape(w) = (n_class, n_features)
 
         def LR_predict(_x):
             w_tensor = tf.constant(w.T)  # (n_features, n_class)
@@ -500,6 +471,9 @@ class MDM(ClassifierBlock):
         assert x.shape[1] == x.shape[2], 'The shape of \'x\' should be (n_epochs, n_channels, n_channles).'
         assert len(y) == len(x)
         self.model.fit(x, y)
+        covmeans = np.array(self.model.covmeans_).astype(np.float64)
+        dist_metric = self.dist_metric
+        self.weights = [covmeans, dist_metric]
 
     def predict(self, x):
         assert len(x.shape) == 3, 'The shape of \'x\' should be (n_epochs, n_channels, n_channles).'
@@ -507,13 +481,8 @@ class MDM(ClassifierBlock):
         y = self.model.predict_proba(x)
         return y
 
-    def __get_weights(self):
-        covmeans = np.array(self.model.covmeans_).astype(np.float64)
-        dist_metric = self.dist_metric
-        return covmeans, dist_metric
-
     def get_keras_layer(self):
-        covmeans, dist_metric = self.__get_weights()  # shape(w) = (n_class, n_channels, n_channels)
+        covmeans, dist_metric = self.weights  # shape(w) = (n_class, n_channels, n_channels)
 
         def mdm_predict(_x):
             covmean_tensor_list = [tf.constant(covmeans[c, :, :]) for c in range(covmeans.shape[0])]
@@ -533,29 +502,125 @@ class MDM(ClassifierBlock):
         return Lambda(mdm_predict)
 
 
+class LDA(ClassifierBlock):
+    def __init__(self, n_components=None, tol=1e-5, name="LDA"):
+        super(LDA, self).__init__(name)
+        self.n_components = n_components
+        self.tol = tol
+        self.model = sklearn_LDA(solver='svd', n_components=self.n_components, tol=self.tol)
+
+    def fit(self, x, y=None):
+        assert len(x.shape) == 2
+        assert len(y) == len(x)
+        self.model.fit(x, y)
+        coef = self.model.coef_
+        intercept_ = self.model.intercept_
+        if len(intercept_) == 1:
+            coef = np.concatenate((-coef, coef), axis=0)/2.
+            intercept_ = np.concatenate((-intercept_, intercept_), axis=0)/2.
+
+        w = np.array(coef).astype(np.float64)
+        b = np.array(intercept_).astype(np.float64)
+        self.weights = [w, b]
+
+    def predict(self, x):
+        assert len(x.shape) == 2
+        y = self.model.predict_proba(x)
+        return y
+
+    def get_keras_layer(self):
+        w, b = self.weights
+
+        def LR_predict(_x):
+            w_tensor = tf.constant(w.T)  # (n_features, n_class)
+            b_tensor = tf.constant(b)  # (n_class,)
+            _logits = tf.nn.xw_plus_b(_x, w_tensor, b_tensor)
+            _probs = tf.nn.softmax(_logits)
+            return _probs
+
+        return Lambda(LR_predict)
+
+
+class LinearSVC(ClassifierBlock):
+    def __init__(self, penalty='l2', loss='squared_hinge', tol=1e-6, C=1.0, class_weight=None,
+                 multi_class='ovr', max_iter=1000, name="LinearSVC"):
+        super(LinearSVC, self).__init__(name)
+        self.penalty = penalty
+        self.loss = loss
+        self.C = C
+        self.class_weight = class_weight
+        self.multi_class = multi_class
+        self.max_iter = max_iter
+        self.tol = tol
+        self.model = sklearn_LSVC(penalty=self.penalty, loss=self.loss, tol=self.tol, C=self.C,
+                                  multi_class=self.multi_class, class_weight=self.class_weight)
+
+    def fit(self, x, y=None):
+        assert len(x.shape) == 2
+        assert len(y) == len(x)
+        self.model.fit(x, y)
+        coef = self.model.coef_
+        intercept_ = self.model.intercept_
+        if len(intercept_) == 1:
+            """
+            This is important! When len(class)==2, Sklearn gives a different type of coef_
+            and intercept. Look at Sklearn for more information!
+            """
+            coef = np.concatenate((-coef, coef), axis=0)/2.
+            intercept_ = np.concatenate((-intercept_, intercept_), axis=0)/2.
+        w = np.array(coef).astype(np.float64)
+        b = np.array(intercept_).astype(np.float64)
+        self.weights = [w, b]
+
+    def predict(self, x):
+        assert len(x.shape) == 2
+        y = self.model.decision_function(x)
+        if len(y.shape) == 1:
+            y = np.reshape(y, newshape=(-1, 1))
+            y = np.concatenate((-y/2., y/2.), axis=1)
+        y = y - np.max(y, axis=1, keepdims=True)
+        y = np.exp(y)
+        y_sum = np.sum(y, axis=1, keepdims=True)
+        y = y/y_sum
+        return y
+
+    def get_keras_layer(self):
+        w, b = self.weights  # shape(w) = (n_class, n_features)
+
+        def LR_predict(_x):
+            w_tensor = tf.constant(w.T)  # (n_features, n_class)
+            b_tensor = tf.constant(b)  # (n_class,)
+            _logits = tf.nn.xw_plus_b(_x, w_tensor, b_tensor)
+            _probs = tf.nn.softmax(_logits)
+            return _probs
+
+        return Lambda(LR_predict)
+
+
 if __name__ == '__main__':
     from tensorflow.keras.models import Model
     from tensorflow.keras.layers import Input
     import os
-    os.environ['CUDA_VISIBLE_DEVICES'] = '1'
-    x =  10+10*np.random.rand(10, 22, 250)
+    os.environ['CUDA_VISIBLE_DEVICES'] = '2'
+    x = 10+10*np.random.rand(10, 250)
     x = x.astype(np.float64)
-    x = np.matmul(x, np.transpose(x, axes=(0, 2, 1)))
+    # x = np.matmul(x, np.transpose(x, axes=(0, 2, 1)))
     y = np.array([0, 0, 1, 1, 0, 0, 1, 1, 0, 0])
 
     # model = CSP(n_components=4, transform_into='average_power')
     # model = PCA4Feature(n_components=3, whiten=True)
     # model = ICA(n_components=4)
-    # model = Xdawn(n_components=4, with_templates=True, transform_flag=False)
+    # model = Xdawn(n_filters=4, with_xdawn_templates=True, apply_filters=False)
     # model = CovarianceFeature(with_mean_templates=True)
     # model = MDM(dist_metric='riemann')
     # # 'riemann','logeuclid','euclid','logdet'
-    model = TangentSpaceFeature()
-
+    # model = TangentSpaceFeature()
+    # model = LDA()
+    model = LinearSVC()
     model.fit(x, y)
-    z = model.transform(x)
+    z = model.predict(x)
 
-    input_layer = Input(shape=(22, 22), dtype=tf.float64)
+    input_layer = Input(shape=(250,), dtype=tf.float64)
     features = model.get_keras_layer()(input_layer)
     keras_model = Model(inputs=input_layer, outputs=features)
     z2 = keras_model.predict(x)
