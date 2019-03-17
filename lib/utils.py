@@ -57,4 +57,4 @@ def shuffle_data(data_size, random_seed=None):
     if random_seed:
         np.random.seed(random_seed)
     indices = np.arange(data_size)
-    return np.random.permutation(indices)
+    return np.random.permutation(indices).squeeze()

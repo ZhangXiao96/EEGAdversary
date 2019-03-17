@@ -1,3 +1,8 @@
+"""
+This file is mainly to re-implement the traditional blocks in Tensorflow,
+so that the gradients could be calculate easily.
+"""
+
 from abc import abstractmethod
 
 from mne.decoding import CSP as mne_CSP
@@ -598,6 +603,7 @@ class LinearSVC(ClassifierBlock):
 
 
 if __name__ == '__main__':
+    # this could be used to see if the keras blocks built correctly.
     from tensorflow.keras.models import Model
     from tensorflow.keras.layers import Input
     import os

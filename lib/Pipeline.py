@@ -1,3 +1,7 @@
+"""
+This file is used to build the model pipeline.
+"""
+
 from lib.Blocks import ProcessingBlock, ClassifierBlock
 from tensorflow.keras.models import Model
 from tensorflow.keras.layers import Input
