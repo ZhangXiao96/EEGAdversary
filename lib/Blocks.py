@@ -1,6 +1,11 @@
 """
 This file is mainly to re-implement the traditional blocks in Tensorflow,
 so that the gradients could be calculate easily.
+
+processing blocks: Normalizer, Flatten, CSP, PCA(features or channels), ICA, xDAWN
+                   Covariance, TangentSpace('riemann' , 'logeuclid' , 'euclid' , 'logdet')
+
+classifier blocks: Logistic Regression, LinearSVM, MDM('riemann' , 'logeuclid' , 'euclid' , 'logdet'), LDA
 """
 
 from abc import abstractmethod
@@ -8,6 +13,7 @@ from abc import abstractmethod
 from mne.decoding import CSP as mne_CSP
 from sklearn.decomposition import PCA as sklearn_PCA
 from sklearn.decomposition import FastICA as sklearn_ICA
+from sklearn.preprocessing import Normalizer as sklearn_Normalizer
 from pyriemann.tangentspace import TangentSpace as riemann_TangentSpace
 from pyriemann.spatialfilters import Xdawn as riemman_Xdawn
 
@@ -78,6 +84,32 @@ class ClassifierBlock(object):
 
 
 # -----------------------ProcessingBlock------------------
+class Normalizer(ProcessingBlock):
+    def __init__(self, norm='l1', name="Normalizer"):
+        super(Normalizer, self).__init__(name)
+        self.norm = norm
+        self.model = sklearn_Normalizer(norm=self.norm)
+
+    def fit(self, x, y):
+        pass
+
+    def transform(self, x):
+        return self.model.transform(x)
+
+    def get_keras_layer(self):
+
+        def norm_transform(_x):
+            if self.norm == 'l1':
+                norms = tf.norm(_x, ord=1, axis=1, keepdims=True)
+            elif self.norm == 'l2':
+                norms = tf.norm(_x, ord=2, axis=1, keepdims=True)
+            else:
+                raise Exception('\'{}\' is not available, should be in (\'l1\', \'l2\').'.format(self.norm))
+            return _x / norms
+
+        return Lambda(norm_transform)
+
+
 class Flatten(ProcessingBlock):
     def __init__(self, name="Flatten"):
         super(Flatten, self).__init__(name)
@@ -414,7 +446,7 @@ class TangentSpaceFeature(ProcessingBlock):
 
 # ------------------------Classifiers-----------------------
 class LogisticRegression(ClassifierBlock):
-    def __init__(self, penalty='l2', tol=1e-6, C=1.0, class_weight=None, max_iter=100, name="LogisticRegression"):
+    def __init__(self, penalty='l2', tol=1e-6, C=1.0, class_weight=None, max_iter=500, name="LogisticRegression"):
         super(LogisticRegression, self).__init__(name)
         self.penalty = penalty
         self.C = C
@@ -622,9 +654,10 @@ if __name__ == '__main__':
     # # 'riemann','logeuclid','euclid','logdet'
     # model = TangentSpaceFeature()
     # model = LDA()
-    model = LinearSVC()
+    # model = LinearSVC()
+    model = Normalizer(norm='l1')
     model.fit(x, y)
-    z = model.predict(x)
+    z = model.transform(x)
 
     input_layer = Input(shape=(250,), dtype=tf.float64)
     features = model.get_keras_layer()(input_layer)
