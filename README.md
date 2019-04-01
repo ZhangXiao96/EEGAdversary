@@ -35,7 +35,7 @@ Here is a small example for how to build the precessing pipeline. Let's assume y
 	    Blocks.TangentSpaceFeature(mean_metric='riemann', name='TangentSpace({})'.format('riemann'))
     ]
     
-    classifier = Blocks.LogisticRegression(class_weight=class_weight)
+    classifier = Blocks.LogisticRegression()
     
     model = Pipeline(processers, classifier)
 
