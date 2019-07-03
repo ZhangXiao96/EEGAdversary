@@ -67,9 +67,12 @@ class Pipeline(object):
             self.classifier.load_weights(weights[-1])
             self.fitted = True
 
-    def get_keras_model(self, input_shape):
+    def get_keras_model(self, input_shape=None, input_tensor=None, only_output=False):
         assert self.fitted, "The pipeline has not been trained yet!"
-        input_x = Input(shape=input_shape, dtype=tf.float64)
+        if input_tensor is None:
+            input_x = Input(shape=input_shape, dtype=tf.float64)
+        else:
+            input_x = input_tensor
         for i in range(len(self.processors)):
             processer = self.processors[i]
             layer = processer.get_keras_layer()
@@ -80,7 +83,10 @@ class Pipeline(object):
 
         layer = self.classifier.get_keras_layer()
         output = layer(x)
-        return Model(inputs=input_x, outputs=output)
+        if only_output:
+            return output
+        else:
+            return Model(inputs=input_x, outputs=output)
 
     def pipeline_information(self):
         print('processors: {}'.format(', '.join([processor.name for processor in self.processors])))

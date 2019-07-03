@@ -20,8 +20,8 @@ interval = 175  # ms NOTE: interval should be no larger than the time between tw
 standard_before = True  # normalized before feature extraction
 model_name = 'xDAWN+Riemann+LR'
 data_dir = 'processed_data'
-target_char = 'z'
-epsilon = 0.6  # to control the SNR of EEG with noise.
+target_char = 'y'
+epsilon = 0.5  # to control the energy of the noise.
 Fs = 240  # Hz
 # ========================================================
 

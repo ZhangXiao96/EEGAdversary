@@ -19,8 +19,8 @@ interval = 175  # ms NOTE: interval should be no larger than the time between tw
 standard_before = True  # normalized before feature extraction
 model_name = 'xDAWN+Riemann+LR'
 data_dir = 'processed_data'
-target_char = 'z'
-epsilon = 0.6  # to control the SNR of EEG with noise indirectly.
+target_char = 'y'
+epsilon = 0.5  # to control the energy of the noise.
 Fs = 240  # Hz
 # ========================================================
 
@@ -42,9 +42,14 @@ test_file = os.path.join('Data', data_dir, '{}_test.mat'.format(subject))
 templates_path = os.path.join(model_dir, 'tampletes.mat')
 avg_epoch_path = os.path.join(model_dir, 'avg_epochs_real.mat')
 
+
+epoch_length = int(Fs * window_time_length / 1000.)
+perturb_length = math.floor(Fs * perturb_time / 1000.)
+
 # get templates
 adv_templates = io.loadmat(templates_path)
-to_target = epsilon * adv_templates['to_target']
+to_target = adv_templates['to_target'][:, :perturb_length]
+to_target = epsilon * to_target / np.linalg.norm(to_target, axis=-1, keepdims=True)
 
 # =============================== load data ===============================
 test_data = io.loadmat(test_file)
@@ -62,10 +67,6 @@ if standard_before:
     mean = params['mean']
     std = params['std']
     original_signal = (original_signal-mean)/std
-
-
-epoch_length = int(Fs * window_time_length / 1000.)
-perturb_length = math.floor(Fs * perturb_time / 1000.)
 
 signal = np.copy(original_signal)
 x, y = np.argwhere(_CHAR_MATRIX == target_char)[0]
@@ -92,7 +93,7 @@ for i_trial in range(n_trial):
         start_id = start_ids[sti]
         if temp_stimuli[sti] in target_locations:
             signal[i_trial, :, start_id:(start_id + perturb_length)] \
-                += to_target[:, :perturb_length]
+                += to_target
 
     # split data into epochs
     for start_id in start_ids:

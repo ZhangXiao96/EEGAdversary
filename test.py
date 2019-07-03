@@ -11,21 +11,22 @@ from tqdm import tqdm
 from scipy import signal as sp_signal
 import os
 
-os.environ['CUDA_VISIBLE_DEVICES'] = '2'
-
 # =============== parameters you may change ==============
 # you should also change the pipline defined below to match the model which will be loaded.
-subject = 'B'
+subject = 'A'
 window_time_length = 600  # ms
 Fs = 240  # Hz
 standard_before = True  # normalized before feature extraction (using mean and std in train set)
 model_name = 'xDAWN+Riemann+LR'
 data_dir = 'processed_data'
-epsilon = 0.6  # to control the SNR of EEG with random noise indirectly.
+epsilon = 0.5  # to control the energy of the noise.
+nb_rounds = 15
+filter_high_cutoff = 15  # Hz, or None
+filter_low_cutoff = 0.1  # Hz, or None
 # ========================================================
 
 # filter for random noise (build filters to filter the noise)
-b, a = sp_signal.butter(4, [0.1/(Fs/2.), 60./(Fs/2.)], 'bandpass')
+b, a = sp_signal.butter(4, [filter_low_cutoff/(Fs/2.), filter_high_cutoff/(Fs/2.)], 'bandpass')
 
 model_dir = os.path.join('runs', model_name, subject)
 load_path = os.path.join(model_dir, 'model.pkl')
@@ -61,7 +62,6 @@ length = int(Fs * window_time_length / 1000.)
 
 # ============================ load model ==============================
 processers = [
-    # Blocks.PCA4Channel(n_components=20),
     Blocks.Xdawn(n_filters=8, with_xdawn_templates=True, apply_filters=True),
     Blocks.CovarianceFeature(with_mean_templates=False),
     Blocks.TangentSpaceFeature(mean_metric='riemann', name='TangentSpace({})'.format('riemann'))
@@ -85,7 +85,7 @@ for i_trial in tqdm(range(n_trial)):
     # get char prediction for each trial.
     epochs = []
     y = []
-    start_ids = np.argwhere(stimuli[i_trial, :] != 0).ravel()
+    start_ids = np.argwhere(stimuli[i_trial, :] != 0).ravel()[:nb_rounds*12]
     temp_stimuli = stimuli[i_trial, start_ids].ravel()
     for start_id in start_ids:
         epochs.append(signal[i_trial, :, start_id:(start_id+length)])
@@ -109,7 +109,7 @@ for i_trial in tqdm(range(n_trial)):
     # ====================== add noisy target probs for each row/column ========================
     # add random noise
     noise = np.random.standard_normal(epochs.shape)
-    noise = sp_signal.filtfilt(b, a, noise, axis=-1)  # the original data is filtered [0.1, 60]Hz
+    noise = sp_signal.filtfilt(b, a, noise, axis=-1)  # the original data is filtered
     noise = noise / np.linalg.norm(noise, ord=2, axis=-1, keepdims=True)  # standard the noise with respect to channels
     noisy_epochs = epochs + epsilon * noise
 
@@ -125,7 +125,7 @@ for i_trial in tqdm(range(n_trial)):
 
 # show the results
 print()
-print('Subject: {}'.format(subject))
+print('Subject: {} (rounds={})'.format(subject, nb_rounds))
 print('True  chars: {}'.format(''.join(char)))
 
 print('Clean chars: {}'.format(''.join(clean_chars)))

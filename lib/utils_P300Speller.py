@@ -39,7 +39,34 @@ def get_locations(stimuli_code, stimuli_prob):
     return [column, row]
 
 
-def add_template_noise(original_signal, stimuli, target_locations, to_target_template, perturb_length):
+def add_template_noise(original_signal, stimuli, target_locations, to_target_template, perturb_length, epsilon, time_delay=0):
+    """
+    Add template noise to the character trial.
+    :param original_signal: EEG trials. (n_trial, n_channel, n_sample).
+    :param stimuli: stimuli code. (n_trial, n_sample).
+    :param target_locations: Turple which shows the stimuli code of the target row and column. (row_code, column_code).
+    :param to_target_template: the noise template. (n_channel, n_sample).
+    :param perturb_length: Integer. The number of perturbation points.
+    :param epsilon: float. The energy of the perturbation.
+    :param time_delay: int. The delay points when adding the template.
+    :return: adversarial signal
+    """
+    signal = np.copy(original_signal)
+    n_trial = signal.shape[0]
+    target_template = to_target_template[:, :perturb_length]
+    target_template = epsilon * target_template / np.linalg.norm(target_template, axis=-1, keepdims=True)
+    for i_trial in range(n_trial):
+        start_ids = np.argwhere(stimuli[i_trial, :] != 0).ravel()
+        temp_stimuli = stimuli[i_trial, start_ids].ravel()
+        for sti in range(len(start_ids)):
+            start_id = start_ids[sti] + time_delay
+            if temp_stimuli[sti] in target_locations:
+                signal[i_trial, :, start_id:(start_id+perturb_length)] += target_template
+
+    return signal
+
+
+def add_template_noise_both_template(original_signal, stimuli, target_locations, to_target_template, to_nontarget_template, perturb_length):
     """
     Add template noise to the character trial.
     :param original_signal: EEG trials. (n_trial, n_channel, n_sample).
@@ -59,6 +86,8 @@ def add_template_noise(original_signal, stimuli, target_locations, to_target_tem
             start_id = start_ids[sti]
             if temp_stimuli[sti] in target_locations:
                 signal[i_trial, :, start_id:(start_id+perturb_length)] += to_target_template[:, :perturb_length]
+            else:
+                signal[i_trial, :, start_id:(start_id+perturb_length)] += to_nontarget_template[:, :perturb_length]
 
     return signal
 

@@ -29,8 +29,6 @@ from lib.utils_P300Speller import get_char
 import math
 import os
 
-os.environ['CUDA_VISIBLE_DEVICES'] = '1'
-
 # =============== parameters you may change ==============
 # you should also change the pipline defined below to match the model which will be loaded.
 # NOTE: interval is a very important parameter and relevant to data itself.
@@ -42,8 +40,9 @@ model_name = 'xDAWN+Riemann+LR'
 data_dir = 'processed_data'
 acc_file_name = 'attack_acc'
 target_char_list = list('abcdefghijklmnopqrstuvwxyz123456789_')  # to perturb all 100 trials to the target char.
-epsilon = 0.6  # to control the SNR of EEG with noise indirectly.
+epsilon = 0.5  # to control the energy of the noise.
 Fs = 240  # Hz
+nb_rounds = 15  # How many rounds are used to obtain the character.
 # ========================================================
 perturb_time = 2 * interval
 
@@ -52,7 +51,7 @@ load_path = os.path.join(model_dir, 'model.pkl')
 other_path = os.path.join(model_dir, 'other_parameters.mat')
 test_file = os.path.join('Data', data_dir, '{}_test.mat'.format(subject))
 templates_path = os.path.join(model_dir, 'tampletes.mat')
-acc_file_path = os.path.join(model_dir, '{}.npz'.format(acc_file_name))
+acc_file_path = os.path.join(model_dir, '{}_{}.npz'.format(acc_file_name, nb_rounds))
 
 
 _CHAR_MATRIX = np.array(
@@ -66,7 +65,8 @@ _CHAR_MATRIX = np.array(
 
 # get templates
 adv_templates = io.loadmat(templates_path)
-to_target = epsilon * adv_templates['to_target']
+adv_template = adv_templates['to_target']
+to_target = adv_template
 
 # =============================== load data ===============================
 test_data = io.loadmat(test_file)
@@ -111,14 +111,14 @@ for target_char in target_char_list:
     target_locations = (y, x)
 
     # ============================ add adv_noise ============================
-    adv_signal = add_template_noise(original_signal, stimuli, target_locations, to_target, perturb_length)
+    adv_signal = add_template_noise(original_signal, stimuli, target_locations, to_target, perturb_length, epsilon)
 
     # =========================== test ================================
     predict_chars = []
     for i_trial in range(n_trial):
         epochs = []
         y = []
-        start_ids = np.argwhere(stimuli[i_trial, :] != 0).ravel()
+        start_ids = np.argwhere(stimuli[i_trial, :] != 0).ravel()[:nb_rounds*12]
         temp_stimuli = stimuli[i_trial, start_ids].ravel()
 
         # split the char trial to epochs

@@ -14,8 +14,8 @@ import os
 # you can also change the pipeline defined below.
 subject = 'A'
 window_time_length = 600  # ms
-apply_class_weight = True
 Fs = 240  # Hz
+apply_class_weight = True
 standard_before = True  # normalized before feature extraction
 model_name = 'xDAWN+Riemann+LR'
 data_dir = 'processed_data'
@@ -78,9 +78,10 @@ processers = [
     Blocks.TangentSpaceFeature(mean_metric='riemann', name='TangentSpace({})'.format('riemann'))
 ]
 
-classifier = Blocks.LogisticRegression(class_weight=class_weight)
+classifier = Blocks.LogisticRegression(class_weight=class_weight, max_iter=2000)
 
 model = Pipeline(processers, classifier)
+print('subject: {}'.format(subject))
 model.pipeline_information()  # show model information
 
 # ============================== train model ===================================

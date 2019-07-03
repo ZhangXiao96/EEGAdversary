@@ -301,6 +301,12 @@ class ICA(ProcessingBlock):
 
 class CovarianceFeature(ProcessingBlock):
     def __init__(self, with_mean_templates=False, name="CovarianceFeature"):
+        """
+        Covariance Matrix of the inputs.
+        :param with_mean_templates: boolean. Always set to True when decoding ERP data. However, you should be
+        ware that Xdawn block have already added mean templates.
+        :param name: The name of the block.
+        """
         super(CovarianceFeature, self).__init__(name)
         self.with_templates = with_mean_templates
 

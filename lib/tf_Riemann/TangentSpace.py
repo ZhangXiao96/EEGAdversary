@@ -1,7 +1,6 @@
 import tensorflow as tf
 import numpy as np
 from lib.tf_Riemann import op
-from tensorflow.python.ops.distributions.util import fill_triangular_inverse
 
 
 def tangent_space(covmats, Cref):

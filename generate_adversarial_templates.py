@@ -15,21 +15,21 @@ import tensorflow.keras.backend as K
 import tensorflow.keras.losses as losses
 import os
 
-os.environ['CUDA_VISIBLE_DEVICES'] = '3'
 K.set_floatx('float64')
 
 # =============== parameters you may change ==============
-subject = 'A'
+subject = 'B'
 window_time_length = 600  # ms
-epsilon = 2.0  # This was only used in the test phase (not used in saving templates!)
 Fs = 240  # Hz
 standard_before = True  # normalized before feature extraction
 model_name = 'xDAWN+Riemann+LR'
 data_dir = 'processed_data'
+filter_high_cutoff = 15.  # Hz
+filter_low_cutoff = 0.1  # Hz
 # ========================================================
 
 # filter for adversarial noise (build filters to filter the noise to [0.1, 60]Hz)
-b, a = sp_signal.butter(4, [0.1/(Fs/2.), 60./(Fs/2.)], 'bandpass')
+b, a = sp_signal.butter(4, [filter_low_cutoff/(Fs/2.), filter_high_cutoff/(Fs/2.)], 'bandpass')
 
 model_dir = os.path.join('runs', model_name, subject)
 load_path = os.path.join(model_dir, 'model.pkl')
@@ -82,36 +82,17 @@ epochs, y = trials_to_epochs(signal, label, stimuli, epoch_length)
 
 # ========================= building adversarial templates ==========================
 attack_agent = WhiteBoxAttacks(keras_model, K.get_session(), loss_fn=losses.sparse_categorical_crossentropy)
-adv_x = attack_agent.fgm(epochs, y, target=False, norm_ord=2, epsilon=epsilon)
+adv_x = attack_agent.fgm(epochs, y, target=False, norm_ord=2, epsilon=1.)
 adv_noise = adv_x - epochs
 
+# to_target noise
 noise_to_target = np.mean(adv_noise[y == 0, :, :], axis=0, keepdims=False)  # (channels, samples)
-noise_to_target = sp_signal.filtfilt(b, a, noise_to_target)  # [0.1, 60]Hz
-# standard with respect to channels
+noise_to_target = sp_signal.filtfilt(b, a, noise_to_target)
 noise_to_target = noise_to_target / np.linalg.norm(noise_to_target, axis=-1, keepdims=True)
 
+# to_nontarget noise
 noise_to_nonetarget = np.mean(adv_noise[y == 1, :, :], axis=0, keepdims=False)  # (channels, samples)
-noise_to_nonetarget = sp_signal.filtfilt(b, a, noise_to_nonetarget)  # [0.1, 60]Hz
-# standard with respect to channels
+noise_to_nonetarget = sp_signal.filtfilt(b, a, noise_to_nonetarget)
 noise_to_nonetarget = noise_to_nonetarget / np.linalg.norm(noise_to_nonetarget, axis=-1, keepdims=True)
 
 io.savemat(templates_path, {'to_target': noise_to_target, 'to_nonetarget': noise_to_nonetarget})
-
-# # ================================== noisy test ===================================
-# noise = np.random.standard_normal(epochs.shape)
-# noise = sp_signal.filtfilt(b, a, noise)
-# noise = noise / np.linalg.norm(noise, axis=-1, keepdims=True)
-# noise_epochs = epochs + epsilon * noise
-# y_pred = np.argmax(keras_model.predict(noise_epochs), axis=1)
-# bca = np.round(utils.bca(y, y_pred), decimals=3)
-# acc = np.round(np.sum(y_pred == y).astype(np.float64)/len(y_pred), decimals=3)
-# print('noise: acc={}, bca={}'.format(acc, bca))
-
-
-# # ========================== with adversarial templates test (Roughly) ===================
-# epochs[y == 0, :, :] = epochs[y == 0, :, :] + epsilon * noise_to_target
-# epochs[y == 1, :, :] = epochs[y == 1, :, :] + epsilon * noise_to_nonetarget
-# y_pred = np.argmax(keras_model.predict(epochs), axis=1)
-# bca = np.round(utils.bca(y, y_pred), decimals=3)
-# acc = np.round(np.sum(y_pred == y).astype(np.float64)/len(y_pred), decimals=3)
-# print('templates: acc={}, bca={}'.format(acc, bca))

@@ -6,15 +6,14 @@ import os
 
 seaborn.set_style('darkgrid')
 
-np.random.seed(1000)
-
 # ========================
 subject = 'B'
 model_name = 'xDAWN+Riemann+LR'
-epsilon = 0.6
+epsilon = 0.5  # to control the energy of the noise.
+nb_rounds = 15
 # =========================
 
-model_path = os.path.join('..', 'runs', model_name, subject, 'attack_acc.npz')
+model_path = os.path.join('..', 'runs', model_name, subject, 'attack_acc_{}.npz'.format(nb_rounds))
 target_char_list = list('abcdefghijklmnopqrstuvwxyz123456789_')
 
 N = len(target_char_list)
