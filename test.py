@@ -7,19 +7,20 @@ import lib.Blocks as Blocks
 from lib.Pipeline import Pipeline
 import scipy.io as io
 from lib.utils_P300Speller import get_char
+from lib.utils import ITR
 from tqdm import tqdm
 from scipy import signal as sp_signal
 import os
 
 # =============== parameters you may change ==============
 # you should also change the pipline defined below to match the model which will be loaded.
-subject = 'A'
+subject = 'B'
 window_time_length = 600  # ms
 Fs = 240  # Hz
 standard_before = True  # normalized before feature extraction (using mean and std in train set)
 model_name = 'xDAWN+Riemann+LR'
 data_dir = 'processed_data'
-epsilon = 0.5  # to control the energy of the noise.
+epsilon = 0.5  # to control the SNR of EEG with random noise indirectly.
 nb_rounds = 15
 filter_high_cutoff = 15  # Hz, or None
 filter_low_cutoff = 0.1  # Hz, or None
@@ -136,5 +137,11 @@ print('Noisy chars: {}'.format(''.join(noisy_chars)))
 noisy_mark = np.where(noisy_chars == char, 1, 0)
 print('Noisy marks: {}'.format(''.join([str(x) for x in noisy_mark])))
 
-print('Clean Acc: {}'.format(np.mean(clean_mark)))
-print('Noisy Acc: {}'.format(np.mean(noisy_mark)))
+Q = 36
+T = ((nb_rounds-1) * 12 * 175 + 11 * 175 + 600) / 1000.
+clean_acc = np.mean(clean_mark)
+clean_ITR = ITR(clean_acc, Q, T)
+noisy_acc = np.mean(noisy_mark)
+noisy_ITR = ITR(noisy_acc, Q, T)
+print('Clean: Acc={}, ITR={} bits/min'.format(clean_acc, clean_ITR))
+print('Noisy: Acc={}, ITR={} bits/min'.format(noisy_acc, noisy_ITR))

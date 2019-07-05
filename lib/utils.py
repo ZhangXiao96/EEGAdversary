@@ -1,4 +1,5 @@
 import numpy as np
+import math
 from sklearn.metrics import confusion_matrix
 
 
@@ -10,6 +11,18 @@ def bca(y_true, y_pred):
         acc = m[i, i]/np.sum(m[i, :], keepdims=False).astype(np.float32)
         acc_each_label += acc
     return acc_each_label/numb
+
+
+def ITR(P, Q, T):
+    """
+    Calculate the Information Translate Rate (ITR).
+    ITR=\frac{60}{T}[log_2Q+Plog_2P+(1-P)log_2\frac{1-P}{Q-1}]
+    :param P: Accuracy.
+    :param Q: Number of targets (classes).
+    :param T: Used time to translate a target. Unit: s.
+    :return: ITR. Unit: bits/min.
+    """
+    return 60./T * (math.log2(Q)+P*math.log2(P)+(1-P)*math.log2((1.-P)/(Q-1.)))
 
 
 def acc(y_true, y_pred):

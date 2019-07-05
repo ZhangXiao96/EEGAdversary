@@ -13,14 +13,14 @@ import os
 # =============== parameters you may change ==============
 # you should also change the pipline defined below to match the model which will be loaded.
 # NOTE: interval is a very important parameter and relevant to data itself.
-subject = 'B'
+subject = 'A'
 window_time_length = 600  # ms
 interval = 175  # ms NOTE: interval should be no larger than the time between two intensifications.
 standard_before = True  # normalized before feature extraction
 model_name = 'xDAWN+Riemann+LR'
 data_dir = 'processed_data'
 target_char = 'y'
-epsilon = 0.5  # to control the energy of the noise.
+epsilon = 0.5  # to control the SNR of EEG with noise indirectly.
 Fs = 240  # Hz
 # ========================================================
 
@@ -49,7 +49,7 @@ perturb_length = math.floor(Fs * perturb_time / 1000.)
 # get templates
 adv_templates = io.loadmat(templates_path)
 to_target = adv_templates['to_target'][:, :perturb_length]
-to_target = epsilon * to_target / np.linalg.norm(to_target, axis=-1, keepdims=True)
+to_target = epsilon * to_target / np.linalg.norm(to_target, axis=-1, ord=2, keepdims=True)
 
 # =============================== load data ===============================
 test_data = io.loadmat(test_file)

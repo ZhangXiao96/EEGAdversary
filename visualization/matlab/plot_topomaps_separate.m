@@ -42,67 +42,88 @@ time_axis = (0:1:time_length-1)/Fs;
 
 %% plot averaged responses %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 figure
-
-subplot 231;
+subplot(121);
 plot(time_axis,clean_target(:,channel),'linewidth',2)
 hold on
 plot(time_axis,clean_nontarget(:,channel),'r','linewidth',2)
 ylim(y_limit)
 legend('Targets','Nontargets');
 xlabel('Time (s)');
-ylabel({'{\bfClean}'; ''; 'Amplitude'});
-title('Averaged Responses (Cz)');
-set(gca, 'fontsize', fontsize);
+ylabel('Amplitude');
+title('Clean');
+set(gca, 'fontsize',fontsize);
 
-subplot 234;
+subplot(122);
 plot(time_axis,adv_target(:,channel),'linewidth',2);
 hold on
 plot(time_axis,adv_nontarget(:,channel),'r','linewidth',2)
-ylim(y_limit);
+ylim(y_limit)
 legend('Targets','Nontargets');
 xlabel('Time (s)');
-ylabel({'{\bfAdversarial}'; ''; 'Amplitude'});
+ylabel('Amplitude');
+title('Adversarial');
+set(gcf,'name','Averaged P300 Responses over Cz');
 set(gca, 'fontsize',fontsize);
+set (gcf,'Position',[100,100,800,300], 'color','w')
+saveas(gcf, [subject '_P300' '.eps'], 'psc');
 
 %%  spectrom %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Target/NonTarget voltage spectrom
-subplot 232;
 clean_diff = clean_target(:,channel);% - clean_nontarget(:, channel);
 adv_diff = adv_target(:,channel);% - adv_nontarget(:, channel);
+figure
+subplot(121);
 [~, F, T, P] = spectrogram(clean_diff, 32, 30, 240, Fs);
 imagesc(T, F(1:30), abs(P(1:30, :)));
-axis xy;
+axis xy
 xlabel('Time (s)'); ylabel('Frequency (Hz)');
 caxis(tf_c_limit);
-colorbar;
-title('Spectrogram (Cz)');
+title('Clean');
 set(gca, 'fontsize', fontsize);
 
-subplot 235;
+subplot(122);
 [~, F, T, P] = spectrogram(adv_diff, 32, 30, 240, Fs);
 imagesc(T, F(1:30), abs(P(1:30, :)));
-axis xy;
+axis xy
 xlabel('Time (s)'); ylabel('Frequency (Hz)');
 caxis(tf_c_limit);
-colorbar;
+title('Adversarial');
 set(gca, 'fontsize', fontsize);
+
+axes('position', [0.8, 0.2, 0.2, 0.7]);
+axis off;
+caxis(tf_c_limit);
+colorbar();
+
+set(gcf, 'name', 'Target/Nontarget Difference Specotrogram');
+set (gcf,'Position',[100,100,800,300], 'color','w');
+saveas(gcf, [subject '_spectrogram' '.eps'], 'psc');
 
 %%  topography %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Target/NonTarget voltage topography plot at 300ms (sample 72)
 clean_vdiff=abs(clean_target(72, :)-clean_nontarget(72, :));
-subplot 233;
+figure
+subplot(121);
 topoplotEEG(clean_vdiff,'eloc64.txt','gridscale',150);
 caxis(topo_c_limit);
-colorbar;
-title('Topography (300ms)');
+title('Clean');
 set(gca, 'fontsize', fontsize);
+set(gca, 'position', [0.13, 0.05, 0.3347, 0.785]);
 
+subplot(122);
 adv_vdiff=abs(adv_target(72, :)-adv_nontarget(72, :));
-subplot 236;
 topoplotEEG(adv_vdiff,'eloc64.txt','gridscale',150);
 caxis(topo_c_limit);
-colorbar;
+title('Adversarial');
 set(gca, 'fontsize', fontsize);
-set(gcf,'Position',get(0,'ScreenSize'));
+set(gca, 'position', [0.47, 0.05, 0.3347, 0.785]);
 
+axes('position', [0.7, 0.15, 0.2, 0.7]);
+axis off;
+caxis(topo_c_limit);
+colorbar();
+
+set(gcf, 'name', 'Target/Nontarget Difference Topoplot');
+set (gcf,'Position',[100,100,720,300], 'color','w');
+saveas(gcf, [subject '_topoplot' '.eps'], 'psc')
 
