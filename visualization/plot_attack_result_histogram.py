@@ -44,7 +44,7 @@ plt.yticks(fontsize=12)
 plt.ylabel("Attack Score", fontsize=14)
 
 plt.xticks(x, list('abcdefghijklmnopqrstuvwxyz123456789_'.upper()), fontsize=11)
-plt.xlabel("Target Character", fontsize=14)
+plt.xlabel("Attacker Character", fontsize=14)
 plt.xlim([-0.5, len(target_char_list)-0.5])
 # plt.legend(fontsize=12)
 for rect in rects1:

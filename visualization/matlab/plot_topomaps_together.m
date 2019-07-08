@@ -9,7 +9,7 @@ fontsize = 15;
 
 %% prepare
 model_dir = ['../../runs/' model_name '/' subject];
-epoch_file = [model_dir '/' 'avg_epochs_real.mat'];
+epoch_file = [model_dir '/' 'avg_epochs.mat'];
 
 % figure settings.
 if strcmp(subject, 'A')
