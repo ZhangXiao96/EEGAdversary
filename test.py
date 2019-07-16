@@ -25,6 +25,9 @@ nb_rounds = 15
 filter_high_cutoff = 15  # Hz, or None
 filter_low_cutoff = 0.1  # Hz, or None
 # ========================================================
+# epsilon should be recorrected since random noise is added on the whole epoch instead of the 350ms perturbed period.
+adv_perturb_time_length = 175*2  # ms
+epsilon = epsilon / adv_perturb_time_length * window_time_length
 
 # filter for random noise (build filters to filter the noise)
 b, a = sp_signal.butter(4, [filter_low_cutoff/(Fs/2.), filter_high_cutoff/(Fs/2.)], 'bandpass')
