@@ -34,7 +34,7 @@ def acc(y_true, y_pred):
 def batch_iter(data, batchsize, shuffle=True):
     data = np.array(list(data))
     data_size = data.shape[0]
-    num_batches = int((data_size-1)/batchsize) + 1
+    num_batches = np.ceil(data_size/batchsize).astype(np.int)
     # Shuffle the data
     if shuffle:
         shuffle_indices = shuffle_data(data_size)

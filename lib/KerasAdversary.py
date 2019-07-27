@@ -223,7 +223,7 @@ class WhiteBoxAttacks(object):
         adv_x = np.concatenate(adv_x, axis=0)
         return adv_x
 
-    def fgm(self, x, y, target=False, epsilon=0.1, norm_ord=None, batch_size=256, clip_min=None, clip_max=None):
+    def fgm(self, x, y, target=False, epsilon=0.1, norm_ord=None, batch_size=256, clip_min=None, clip_max=None, tol=1e-8):
         """
         Fast Gradient Method (fgm).
         Just add the gradients whose ord norm is epsilon (fixed).
@@ -243,7 +243,7 @@ class WhiteBoxAttacks(object):
 
         if norm_ord is not None:
             adv_flat = np.reshape(gradients, newshape=[gradients.shape[0], -1])
-            norms = np.linalg.norm(adv_flat, ord=norm_ord, axis=1, keepdims=True)
+            norms = np.linalg.norm(adv_flat, ord=norm_ord, axis=1, keepdims=True) + tol
             gradients = np.reshape(adv_flat / norms, newshape=gradients.shape)
 
         adv_noise = epsilon * gradients
